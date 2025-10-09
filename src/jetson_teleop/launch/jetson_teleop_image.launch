@@ -1,0 +1,20 @@
+<launch>
+    <!-- Running Joy node -->
+    <node respawn="true" pkg="joy"
+        type="joy_node" name="jetson_joy" >
+        <param name="dev" type="string" value="/dev/input/js0" />
+        <param name="deadzone" value="0.12" />
+    </node>
+
+    <!-- Running Joy to Twist node -->
+    <node pkg="jetson_teleop" type="joy2twist.py" name="joy2twist"/>
+
+    <!-- Rosserial Arduino -->
+    <node name="serial_node" pkg="rosserial_python" type="serial_node.py">
+            <param name="port" value="/dev/ttyUSB0"/>
+            <param name="baud" value="57600" />
+    </node>
+    
+    <!-- Running Realsense BRG image -->
+    <node pkg="jetson_teleop" type="realsense_node.py" name="bgr_image"/> 
+</launch>

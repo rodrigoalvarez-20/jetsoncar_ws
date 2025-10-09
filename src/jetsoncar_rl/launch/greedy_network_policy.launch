@@ -1,0 +1,19 @@
+<launch>
+    <!-- Running Joy node -->
+    <node respawn="true" pkg="joy"
+        type="joy_node" name="jetson_joy" >
+        <param name="dev" type="string" value="/dev/input/js0" />
+        <param name="deadzone" value="0.12" />
+    </node>
+
+    <!-- Running greedy network policy control node -->
+    <node pkg="jetsoncar_rl" type="gredy_network_policy.py" name="greedy_network_policy.py"/>
+
+    <!-- Rosserial Arduino -->
+    <node name="serial_node" pkg="rosserial_python" type="serial_node.py">
+            <param name="port" value="/dev/ttyUSB0"/>
+            <param name="baud" value="57600" />
+    </node>
+</launch>
+    
+

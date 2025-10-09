@@ -1,0 +1,8 @@
+<launch>
+
+  <!-- Running Joy node -->
+   <node respawn="true" pkg="jetson_teleop" type="listener.py" name="listener" />
+   <machine name="alexander-550LA" user="alexander" address="10.42.0.1" default="true" env-loader="/opt/ros/indigo/env.sh"/>
+   <node pkg="beginner_tutorials" name="talker" type="talker.py" machine="alexander-550LA" />
+
+</launch>

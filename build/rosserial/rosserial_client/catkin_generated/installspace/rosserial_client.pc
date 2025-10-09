@@ -1,0 +1,8 @@
+prefix=/home/ubuntu/jetsoncar_ws/install
+
+Name: rosserial_client
+Description: Description of rosserial_client
+Version: 0.7.7
+Cflags: 
+Libs: -L/home/ubuntu/jetsoncar_ws/install/lib 
+Requires: 

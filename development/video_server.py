@@ -16,30 +16,27 @@ s.listen(10)
 print('Socket now listening')
 
 conn, addr = s.accept()
-
-data = b'' ### CHANGED
-payload_size = struct.calcsize("H") ### CHANGED
-
+payload_size = struct.calcsize(">L") 
+data = b""
 while True:
-
-    # Retrieve message size
+    # Receive the packed size
     while len(data) < payload_size:
-        data += conn.recv(4096)
-    print("PKG rcv")
+        data += conn.recv(4096) # Adjust buffer size as needed
     packed_msg_size = data[:payload_size]
     data = data[payload_size:]
-    msg_size = struct.unpack("L", packed_msg_size)[0] ### CHANGED
+    msg_size = struct.unpack(">L", packed_msg_size)[0]
 
-    # Retrieve all data based on message size
     while len(data) < msg_size:
         data += conn.recv(4096)
-
     frame_data = data[:msg_size]
     data = data[msg_size:]
+    
+    # Deserialize the numpy array of the encoded image
+    encoded_frame_array = pickle.loads(frame_data, fix_imports=True, encoding="bytes")
 
-    # Extract frame
-    frame = pickle.loads(frame_data)
+    # Decode the image data into an OpenCV frame
+    frame = cv2.imdecode(encoded_frame_array, cv2.IMREAD_COLOR) 
 
-    # Display
-    cv2.imshow('frame', frame)
+    # Display the frame
+    cv2.imshow('Received Frame', frame)
     cv2.waitKey(1)

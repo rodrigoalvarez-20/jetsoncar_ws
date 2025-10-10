@@ -5,7 +5,7 @@ import pickle
 import socket
 import struct  # ## new code
 import sys
-#from concurrent.futures import ThreadPoolExecutor
+# from concurrent.futures import ThreadPoolExecutor
 import threading
 
 import cv2
@@ -22,12 +22,15 @@ from keras.layers import Activation, Dense
 from keras.models import Sequential
 from sensor_msgs.msg import Joy
 
-clientsocket=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-clientsocket.connect(('192.168.1.84',8089))
+clientsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+clientsocket.connect(("192.168.1.84", 8089))
 
 global camera_frame, camera_pipeline
 camera_frame = None
 camera_pipeline = None
+
+camera_frame_lock = threading.Lock()
+
 
 def connect_to_camera():
     global camera_pipeline
@@ -42,11 +45,37 @@ def connect_to_camera():
 def poll_camera_frames():
     global camera_pipeline
     global camera_frame
-    while True:    
+    encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 90]  # JPEG quality for compression
+    while True:
         if camera_pipeline:
             frames = camera_pipeline.wait_for_frames()
-            camera_frame = frames.get_color_frame()
-            print("Polling")
+            new_color_frame = frames.get_color_frame()
+
+            if new_color_frame:
+                # 1. Convert rs.frame to NumPy array
+                frame_array = np.asanyarray(new_color_frame.get_data())
+                # 2. Encode the frame (compression and serialization)
+                result, encoded_frame = cv2.imencode(".jpg", frame_array, encode_param)
+                # 3. Serialize the encoded array for transmission
+                data = pickle.dumps(encoded_frame, 0)
+                # 4. Prepend the size of the data payload
+                message_size = struct.pack(">L", len(data))
+                # 5. Send the size and then the data over the socket
+                try:
+                    # Non-blocking send (sendall handles potential partial sends)
+                    clientsocket.sendall(message_size + data)
+                    # print(f"Polling and sending frame of size {len(data)}")
+                except Exception as e:
+                    # Handle broken pipe or connection error
+                    print(f"Socket error: {e}")
+                    # You might want to break the loop or try to reconnect here
+                # 6. Thread-safe update of the global camera_frame
+                with camera_frame_lock:
+                    camera_frame = new_color_frame  # Update the global frame for the control thread
+            # print("Polling")
+        else:
+            rospy.sleep(0.01)  # Sleep briefly if pipeline isn't ready
+
 
 class MLPControlNode(object):
     def __init__(self):
@@ -161,11 +190,13 @@ class MLPControlNode(object):
     def mlp_control(self):
         global camera_frame
         counter = 0
-        #local_frame = camera_frame
         self.create_model()
         print("Finsh model. Listening for instructions")
         while not rospy.is_shutdown():
-            local_frame = camera_frame
+            local_frame = None            
+            # Thread-safe read of the global camera_frame
+            with camera_frame_lock:
+                local_frame = camera_frame
             if self.vel_state:
                 self.frame_counter += 1
                 # self.twist.linear.x = 2
@@ -178,23 +209,22 @@ class MLPControlNode(object):
                 else:
                     counter = 0
                 # Wait for a coherent pair of frames: depth and color
-                #frames = self.pipeline.wait_for_frames()
-                #color_frame = frames.get_color_frame()
+                # frames = self.pipeline.wait_for_frames()
+                # color_frame = frames.get_color_frame()
                 if not local_frame:
                     print("No frame found")
+                    self.rate.sleep()
                     continue
-                
+
                 self.color_image = np.asanyarray(local_frame.get_data())
                 print("Image Obtained inside control")
-                
+
                 self.eta, self.delta_x = self.get_state_values(
                     self.color_image, self.last_eta, self.last_delta_x
-                 )
-                #self.eta = None
-                #self.delta_x = None
-                # self.twist.angular.z = self.P
-                # self.experience = self.experience + [(self.delta_x, self.eta, self.twist.angular.z)]
-                self.experience.append((self.delta_x, self.eta, self.twist.angular.z, self.frame_counter))
+                )
+                self.experience.append(
+                    (self.delta_x, self.eta, self.twist.angular.z, self.frame_counter)
+                )
 
                 if self.eta and self.delta_x:
                     self.last_eta = self.eta
@@ -225,8 +255,8 @@ class MLPControlNode(object):
         if camera_pipeline:
             camera_pipeline.close()
             camera_pipeline = None
-        
-        #with open("experiences/testing_mlp.txt", "w") as exp_doc:
+
+        # with open("experiences/testing_mlp.txt", "w") as exp_doc:
         #    for i in self.experience:
         #        for j in i:
         #            if isinstance(j, float):
@@ -242,13 +272,16 @@ if __name__ == "__main__":
         rospy.init_node("mlp_control", anonymous=True)
         connect_to_camera()
         mlp_control = MLPControlNode()
-        #with ThreadPoolExecutor(max_workers=2) as executor:
+        # with ThreadPoolExecutor(max_workers=2) as executor:
         #    executor.submit(poll_camera_frames)
         #    executor.submit(mlp_control.mlp_control)
         camera_poll = threading.Thread(target=poll_camera_frames)
         control_service = threading.Thread(target=mlp_control.mlp_control)
-        
+
         camera_poll.start()
         control_service.start()
+        
+        # Keep the main thread alive for ROS to process callbacks and for the other threads to run
+        rospy.spin() 
     except rospy.ROSInterruptException:
         pass

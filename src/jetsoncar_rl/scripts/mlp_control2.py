@@ -5,6 +5,7 @@ import pickle
 import socket
 import struct  # ## new code
 import sys
+from concurrent.futures import ThreadPoolExecutor
 
 import cv2
 import numpy as np
@@ -20,25 +21,39 @@ from keras.layers import Activation, Dense
 from keras.models import Sequential
 from sensor_msgs.msg import Joy
 
-clientsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-clientsocket.connect(("192.168.1.84", 8089))
+clientsocket=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+clientsocket.connect(('192.168.1.84',8089))
 
+global camera_frame, camera_pipeline
+camera_frame = None
+camera_pipeline = None
+
+def connect_to_camera():
+    global camera_pipeline
+    camera_pipeline = rs.pipeline()
+    camera_config = rs.config()
+    # config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+    camera_config.enable_stream(rs.stream.color, 320, 180, rs.format.bgr8, 60)
+    camera_pipeline.start(camera_config)
+
+
+def poll_camera_frames():
+    global camera_pipeline
+    global camera_frame
+    while True:    
+        if camera_pipeline:
+            frames = camera_pipeline.wait_for_frames()
+            camera_frame = frames.get_color_frame()
 
 class MLPControlNode(object):
     def __init__(self):
         # camera Parameters
         self.episode = 45
         self.frame_counter = -1
-        self.pipeline = rs.pipeline()
-        self.config = rs.config()
-        # config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-        self.config.enable_stream(rs.stream.color, 320, 180, rs.format.bgr8, 60)
         self.color_image = np.zeros([180, 320, 3])
         self.img_shape = np.shape(self.color_image)
         self.roi = (90, 170, 0, self.img_shape[1])
         self.none_counter = 0
-        # Start streaming
-        self.pipeline.start(self.config)
         # feature extraction parameters
         self.eta = None
         self.delta_x = None
@@ -141,60 +156,48 @@ class MLPControlNode(object):
         self.model.predict(np.array([[-20, 0]]))
 
     def mlp_control(self):
+        global camera_frame
         counter = 0
-        frames = self.pipeline.wait_for_frames()
-        color_frame = frames.get_color_frame()
+        #local_frame = camera_frame
         self.create_model()
         while not rospy.is_shutdown():
+            local_frame = camera_frame
             if self.vel_state:
                 self.frame_counter += 1
                 # self.twist.linear.x = 2
-            if counter < 50:
-                self.twist.linear.x = 1.18
-                counter += 1
-            elif counter < 60:
-                self.twist.linear.x = 0
-                counter += 1
-            else:
-                counter = 0
-            # Wait for a coherent pair of frames: depth and color
-            frames = self.pipeline.wait_for_frames()
-            color_frame = frames.get_color_frame()
-            if not color_frame:
-                continue
+                if counter < 50:
+                    self.twist.linear.x = 1.18
+                    counter += 1
+                elif counter < 60:
+                    self.twist.linear.x = 0
+                    counter += 1
+                else:
+                    counter = 0
+                # Wait for a coherent pair of frames: depth and color
+                #frames = self.pipeline.wait_for_frames()
+                #color_frame = frames.get_color_frame()
+                if not local_frame:
+                    continue
+                
+                self.color_image = np.asanyarray(local_frame.get_data())
+                print("Image Obtained inside control")
+                
+                self.eta, self.delta_x = self.get_state_values(
+                    self.color_image, self.last_eta, self.last_delta_x
+                 )
+                #self.eta = None
+                #self.delta_x = None
+                # self.twist.angular.z = self.P
+                # self.experience = self.experience + [(self.delta_x, self.eta, self.twist.angular.z)]
+                self.experience.append((self.delta_x, self.eta, self.twist.angular.z, self.frame_counter))
 
-            self.color_image = np.asanyarray(color_frame.get_data())
-            encode_param = [
-                int(cv2.IMWRITE_JPEG_QUALITY),
-                90,
-            ]  # Set quality (0-100)
-            result, encoded_frame = cv2.imencode(".jpg", self.color_image, encode_param)
-            data = pickle.dumps(
-                encoded_frame, 0
-            )  # Serialize the encoded array for transmission
+                if self.eta and self.delta_x:
+                    self.last_eta = self.eta
+                    self.last_delta_x = self.delta_x
 
-            message_size = struct.pack(">L", len(data))
-
-            # Send the size and then the data over the socket
-            clientsocket.sendall(message_size + data)
-            self.eta, self.delta_x = self.get_state_values(
-                self.color_image, self.last_eta, self.last_delta_x
-            )
-            # self.eta = None
-            # self.delta_x = None
-            # self.twist.angular.z = self.P
-            # self.experience = self.experience + [(self.delta_x, self.eta, self.twist.angular.z)]
-            self.experience.append(
-                (self.delta_x, self.eta, self.twist.angular.z, self.frame_counter)
-            )
-
-            if self.eta and self.delta_x:
-                self.last_eta = self.eta
-                self.last_delta_x = self.delta_x
-
-            self.dahsed_calculation = True
-            self.none_counter = 0
-            self.experience.append((self.delta_x, self.eta, self.twist.angular.z))
+                self.dahsed_calculation = True
+                self.none_counter = 0
+                self.experience.append((self.delta_x, self.eta, self.twist.angular.z))
 
             # self.pub2.publish(self.delta_x)
             # if counter % 2 == 0:
@@ -203,35 +206,39 @@ class MLPControlNode(object):
             # 	self.pub2.publish(self.eta)
             # st = self.model.predict(np.array([[self.eta, self.delta_x]]))[0]
             # self.twist.angular.z = st
-        #else:
-        #    self.none_counter += 1
-        #    if self.none_counter >= 5:
-        #        self.dashed_calculation = False
-        #        self.experience.append(
-        #                (self.delta_x, self.eta, self.twist.angular.z)
-        #            )
+            else:
+                self.none_counter += 1
+                if self.none_counter >= 5:
+                    self.dashed_calculation = False
+                    self.experience.append(
+                        (self.delta_x, self.eta, self.twist.angular.z)
+                    )
 
             self.pub.publish(self.twist)
             self.rate.sleep()
 
-        self.pipeline.stop()
-
-        with open("experiences/testing_mlp.txt", "w") as exp_doc:
-            for i in self.experience:
-                for j in i:
-                    if isinstance(j, float):
-                        exp_doc.write("%.8f" % j)
-                    else:
-                        exp_doc.write(str(j))
-                    exp_doc.write("\t")
-                exp_doc.write("\n")
+        if camera_pipeline:
+            camera_pipeline.close()
+            camera_pipeline = None
+        
+        #with open("experiences/testing_mlp.txt", "w") as exp_doc:
+        #    for i in self.experience:
+        #        for j in i:
+        #            if isinstance(j, float):
+        #                exp_doc.write("%.8f" % j)
+        #            else:
+        #                exp_doc.write(str(j))
+        #            exp_doc.write('\t')
+        #        exp_doc.write('\n')
 
 
 if __name__ == "__main__":
-    rospy.loginfo("Control iniciado")
     try:
         rospy.init_node("mlp_control", anonymous=True)
+        connect_to_camera()
         mlp_control = MLPControlNode()
-        mlp_control.mlp_control()
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            executor.submit(poll_camera_frames)
+            executor.submit(mlp_control.mlp_control)
     except rospy.ROSInterruptException:
         pass

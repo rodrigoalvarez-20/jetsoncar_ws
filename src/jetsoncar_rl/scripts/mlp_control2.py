@@ -67,7 +67,7 @@ def poll_camera_frames():
                     # print(f"Polling and sending frame of size {len(data)}")
                 except Exception as e:
                     # Handle broken pipe or connection error
-                    print(f"Socket error: {e}")
+                    print("Socket error: {}".format(e))
                     # You might want to break the loop or try to reconnect here
                 # 6. Thread-safe update of the global camera_frame
                 with camera_frame_lock:
@@ -219,9 +219,9 @@ class MLPControlNode(object):
                 self.color_image = np.asanyarray(local_frame.get_data())
                 print("Image Obtained inside control")
 
-                self.eta, self.delta_x = self.get_state_values(
-                    self.color_image, self.last_eta, self.last_delta_x
-                )
+                self.eta, self.delta_x = None, None #self.get_state_values(
+                    #self.color_image, self.last_eta, self.last_delta_x
+                #)
                 self.experience.append(
                     (self.delta_x, self.eta, self.twist.angular.z, self.frame_counter)
                 )

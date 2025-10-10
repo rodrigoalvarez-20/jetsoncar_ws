@@ -98,6 +98,7 @@ class MLPControlNode(object):
         crop_img = img[self.roi[0] : self.roi[1], self.roi[2] : self.roi[3]]
         delta_x = None
         eta = None
+        dashed_eq = None
         # Converting sensor_msgs.Image data type to cv2 image
         # img = self.bridge.imgmsg_to_cv2(data, "brg8")
         # Getting interesting points of the road
@@ -106,11 +107,11 @@ class MLPControlNode(object):
         # cv2.imwrite("images/ep" + str(self.episode) + "_frame" + str(self.frame_counter) + ".png", bin_img.astype('uint8'))
         groups = clustering_points(points)
         if self.first_frame:
-            left_group, dashed_group, right_group = classify_groups(groups)
+            _, dashed_group, _ = classify_groups(groups)
             if dashed_group:
                 dashed_eq = polynomial_fitting(dashed_group)
-            if dashed_eq:
-                eta, delta_x = get_heading_angle_lateral_deviation(dashed_eq, self.roi)
+        if dashed_eq:
+            eta, delta_x = get_heading_angle_lateral_deviation(dashed_eq, self.roi)
             if eta and delta_x:
                 self.first_frame = False
                 self.dashed_calculation = True

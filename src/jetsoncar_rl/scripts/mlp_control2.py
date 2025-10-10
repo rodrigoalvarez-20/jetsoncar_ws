@@ -21,7 +21,7 @@ from keras.models import Sequential
 from sensor_msgs.msg import Joy
 
 clientsocket=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-clientsocket.connect(('localhost',8089))
+clientsocket.connect(('192.168.1.84',8089))
 
 class MLPControlNode(object):
     def __init__(self):
@@ -202,16 +202,15 @@ class MLPControlNode(object):
 
         self.pipeline.stop()
 
-        # with open("experiences/testing_mlp.txt", "w") as exp_doc:
-        #    for i in self.experience:
-        #        for j in i:
-        #            if isinstance(j, float):
-        #                exp_doc.write("%.8f" % j)
-        #            else:
-        #                exp_doc.write(str(j))
-        #            exp_doc.write('\t')
-        #        exp_doc.write('\n')
-        # exp_doc.close()
+        with open("experiences/testing_mlp.txt", "w") as exp_doc:
+            for i in self.experience:
+                for j in i:
+                    if isinstance(j, float):
+                        exp_doc.write("%.8f" % j)
+                    else:
+                        exp_doc.write(str(j))
+                    exp_doc.write('\t')
+                exp_doc.write('\n')
 
 
 if __name__ == "__main__":

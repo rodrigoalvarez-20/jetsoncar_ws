@@ -1,8 +1,9 @@
 from __future__ import division
+
 import cv2
 import numpy as np
-from sklearn.cluster import DBSCAN
 from scipy.spatial import distance
+from sklearn.cluster import DBSCAN
 
 inf = float("inf")
 THETA = 0.6562437987498679  # 37.6 degrees
@@ -313,16 +314,15 @@ def get_nearest_state_variables(groups, last_eta, last_delta_x, dashed_calculati
         dashed_eq = list(polynomial_fitting(group))
         if dashed_eq:
             eta, delta_x = get_heading_angle_lateral_deviation(dashed_eq, roi)
-	    if eta and delta_x:
-            	dashed_estimation = [eta * 180 /np.pi, delta_x]
-            	eq_mat.append(dashed_estimation)
+        if eta and delta_x:
+            dashed_estimation = [eta * 180 /np.pi, delta_x]
+            eq_mat.append(dashed_estimation)
 
     eq_mat = np.array(eq_mat)
     if list(eq_mat):
-    	eta, delta_x = closest_node(ref_point, eq_mat, dashed_calculation)
-
-    else: 
-	return None, None
+        eta, delta_x = closest_node(ref_point, eq_mat, dashed_calculation)
+    else:
+        return None, None
     if eta and delta_x:
         #dashed_calculation = True
         return eta, delta_x
@@ -333,20 +333,20 @@ def get_nearest_state_variables(groups, last_eta, last_delta_x, dashed_calculati
             dashed_eq = list(polynomial_fitting(group))
             if dashed_eq:
                 eta, delta_x = get_heading_angle_lateral_deviation(dashed_eq, roi)
-		if eta and delta_x:
-                    left_estimation = [eta * 180 / np.pi, delta_x + 36]
-                    right_estimation = [eta * 180 / np.pi, delta_x - 37]
-                    eq_mat.append(left_estimation)
-                    eq_mat.append(right_estimation)
-        eq_mat = np.array(eq_mat)
-	if list(eq_mat):
-            eta, delta_x = closest_node(ref_point, eq_mat, dashed_calculation)
-	else:
-	    return None, None
-
         if eta and delta_x:
-        #   dashed_calculation = False
-            return eta, delta_x
+            left_estimation = [eta * 180 / np.pi, delta_x + 36]
+            right_estimation = [eta * 180 / np.pi, delta_x - 37]
+            eq_mat.append(left_estimation)
+            eq_mat.append(right_estimation)
+        eq_mat = np.array(eq_mat)
+    
+    if list(eq_mat):
+        eta, delta_x = closest_node(ref_point, eq_mat, dashed_calculation)
+    else:
+        return None, None
 
-        else:
-            return None, None
+    if eta and delta_x:
+        #   dashed_calculation = False
+        return eta, delta_x
+    else:
+        return None, None

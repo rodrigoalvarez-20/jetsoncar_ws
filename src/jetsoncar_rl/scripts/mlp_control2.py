@@ -192,11 +192,13 @@ class MLPControlNode(object):
         counter = 0
         self.create_model()
         print("Finsh model. Listening for instructions")
+        local_frame = None
+        self.eta = None
+        self.delta_x = None
+        # Thread-safe read of the global camera_frame
+        with camera_frame_lock:
+            local_frame = camera_frame
         while not rospy.is_shutdown():
-            local_frame = None            
-            # Thread-safe read of the global camera_frame
-            with camera_frame_lock:
-                local_frame = camera_frame
             if self.vel_state:
                 self.frame_counter += 1
                 # self.twist.linear.x = 2
@@ -211,6 +213,10 @@ class MLPControlNode(object):
                 # Wait for a coherent pair of frames: depth and color
                 # frames = self.pipeline.wait_for_frames()
                 # color_frame = frames.get_color_frame()
+                # Thread-safe read of the global camera_frame
+                with camera_frame_lock:
+                    local_frame = camera_frame
+                
                 if not local_frame:
                     print("No frame found")
                     self.rate.sleep()

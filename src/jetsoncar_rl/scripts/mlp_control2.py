@@ -160,17 +160,19 @@ class MLPControlNode(object):
                 color_frame = frames.get_color_frame()
                 if not color_frame:
                     continue
+                
+                
                 self.color_image = np.asanyarray(color_frame.get_data())
-                data = pickle.dumps(np.asanyarray(color_frame.get_data())) #pickle.dumps(color_frame.) ### new code
-                clientsocket.sendall(struct.pack("H", len(data))+data) ### new code
-                # self.eta, self.delta_x = self.get_state_values(
-                #    self.color_image, self.last_eta, self.last_delta_x
-                # )
-                self.eta = None
-                self.delta_x = None
+                #data = pickle.dumps(np.asanyarray(color_frame.get_data())) #pickle.dumps(color_frame.) ### new code
+                #clientsocket.sendall(struct.pack("L", len(data))+data) ### new code
+                self.eta, self.delta_x = self.get_state_values(
+                    self.color_image, self.last_eta, self.last_delta_x
+                 )
+                #self.eta = None
+                #self.delta_x = None
                 # self.twist.angular.z = self.P
                 # self.experience = self.experience + [(self.delta_x, self.eta, self.twist.angular.z)]
-                # self.experience.append((self.delta_x, self.eta, self.twist.angular.z, self.frame_counter))
+                self.experience.append((self.delta_x, self.eta, self.twist.angular.z, self.frame_counter))
 
                 if self.eta and self.delta_x:
                     self.last_eta = self.eta

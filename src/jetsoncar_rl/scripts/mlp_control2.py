@@ -36,6 +36,7 @@ def connect_to_camera():
     # config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
     camera_config.enable_stream(rs.stream.color, 320, 180, rs.format.bgr8, 60)
     camera_pipeline.start(camera_config)
+    print("Camera ready")
 
 
 def poll_camera_frames():
@@ -45,6 +46,7 @@ def poll_camera_frames():
         if camera_pipeline:
             frames = camera_pipeline.wait_for_frames()
             camera_frame = frames.get_color_frame()
+            print("Polling")
 
 class MLPControlNode(object):
     def __init__(self):
@@ -161,6 +163,7 @@ class MLPControlNode(object):
         counter = 0
         #local_frame = camera_frame
         self.create_model()
+        print("Finsh model. Listening for instructions")
         while not rospy.is_shutdown():
             local_frame = camera_frame
             if self.vel_state:
@@ -178,6 +181,7 @@ class MLPControlNode(object):
                 #frames = self.pipeline.wait_for_frames()
                 #color_frame = frames.get_color_frame()
                 if not local_frame:
+                    print("No frame found")
                     continue
                 
                 self.color_image = np.asanyarray(local_frame.get_data())

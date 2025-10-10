@@ -8,6 +8,7 @@
 
     <!-- Running MLP Control Node -->
     <node pkg="jetsoncar_rl" type="mlp_control2.py" name="mlp_control" output="screen"/>
+    <!-- <node pkg="jetsoncar_rl" type="camera_server.py" name="camera_server" output="screen"/> -->
 
     <!-- Rosserial Arduino -->
     <node name="serial_node" pkg="rosserial_python" type="serial_node.py">

@@ -178,7 +178,7 @@ def polynomial_fitting(group):
     
 
     if len(group) < 4:
-	return []
+        return []
     p1 = group[0]
     p2 = group[-3]
 

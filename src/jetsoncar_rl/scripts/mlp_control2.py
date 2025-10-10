@@ -5,7 +5,8 @@ import pickle
 import socket
 import struct  # ## new code
 import sys
-from concurrent.futures import ThreadPoolExecutor
+#from concurrent.futures import ThreadPoolExecutor
+import threading
 
 import cv2
 import numpy as np
@@ -237,8 +238,13 @@ if __name__ == "__main__":
         rospy.init_node("mlp_control", anonymous=True)
         connect_to_camera()
         mlp_control = MLPControlNode()
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            executor.submit(poll_camera_frames)
-            executor.submit(mlp_control.mlp_control)
+        #with ThreadPoolExecutor(max_workers=2) as executor:
+        #    executor.submit(poll_camera_frames)
+        #    executor.submit(mlp_control.mlp_control)
+        camera_poll = threading.Thread(target=poll_camera_frames)
+        control_service = threading.Thread(target=mlp_control.mlp_control)
+        
+        camera_poll.start()
+        control_service.start()
     except rospy.ROSInterruptException:
         pass

@@ -149,55 +149,52 @@ class MLPControlNode(object):
             if self.vel_state:
                 self.frame_counter += 1
                 # self.twist.linear.x = 2
-                if counter < 50:
-                    self.twist.linear.x = 1.18
-                    counter += 1
-                elif counter < 60:
-                    self.twist.linear.x = 0
-                    counter += 1
-                else:
-                    counter = 0
-                # Wait for a coherent pair of frames: depth and color
-                frames = self.pipeline.wait_for_frames()
-                color_frame = frames.get_color_frame()
-                if not color_frame:
-                    continue
+            if counter < 50:
+                self.twist.linear.x = 1.18
+                counter += 1
+            elif counter < 60:
+                self.twist.linear.x = 0
+                counter += 1
+            else:
+                counter = 0
+            # Wait for a coherent pair of frames: depth and color
+            frames = self.pipeline.wait_for_frames()
+            color_frame = frames.get_color_frame()
+            if not color_frame:
+                continue
 
-                self.color_image = np.asanyarray(color_frame.get_data())
-                encode_param = [
-                    int(cv2.IMWRITE_JPEG_QUALITY),
-                    90,
-                ]  # Set quality (0-100)
-                result, encoded_frame = cv2.imencode(
-                    ".jpg", self.color_image, encode_param
-                )
-                data = pickle.dumps(
-                    encoded_frame, 0
-                )  # Serialize the encoded array for transmission
+            self.color_image = np.asanyarray(color_frame.get_data())
+            encode_param = [
+                int(cv2.IMWRITE_JPEG_QUALITY),
+                90,
+            ]  # Set quality (0-100)
+            result, encoded_frame = cv2.imencode(".jpg", self.color_image, encode_param)
+            data = pickle.dumps(
+                encoded_frame, 0
+            )  # Serialize the encoded array for transmission
 
-                message_size = struct.pack(">L", len(data))
+            message_size = struct.pack(">L", len(data))
 
-                # Send the size and then the data over the socket
-                clientsocket.sendall(message_size + data)
+            # Send the size and then the data over the socket
+            clientsocket.sendall(message_size + data)
+            self.eta, self.delta_x = self.get_state_values(
+                self.color_image, self.last_eta, self.last_delta_x
+            )
+            # self.eta = None
+            # self.delta_x = None
+            # self.twist.angular.z = self.P
+            # self.experience = self.experience + [(self.delta_x, self.eta, self.twist.angular.z)]
+            self.experience.append(
+                (self.delta_x, self.eta, self.twist.angular.z, self.frame_counter)
+            )
 
-                self.eta, self.delta_x = self.get_state_values(
-                    self.color_image, self.last_eta, self.last_delta_x
-                )
-                # self.eta = None
-                # self.delta_x = None
-                # self.twist.angular.z = self.P
-                # self.experience = self.experience + [(self.delta_x, self.eta, self.twist.angular.z)]
-                self.experience.append(
-                    (self.delta_x, self.eta, self.twist.angular.z, self.frame_counter)
-                )
+            if self.eta and self.delta_x:
+                self.last_eta = self.eta
+                self.last_delta_x = self.delta_x
 
-                if self.eta and self.delta_x:
-                    self.last_eta = self.eta
-                    self.last_delta_x = self.delta_x
-
-                self.dahsed_calculation = True
-                self.none_counter = 0
-                self.experience.append((self.delta_x, self.eta, self.twist.angular.z))
+            self.dahsed_calculation = True
+            self.none_counter = 0
+            self.experience.append((self.delta_x, self.eta, self.twist.angular.z))
 
             # self.pub2.publish(self.delta_x)
             # if counter % 2 == 0:
@@ -206,13 +203,13 @@ class MLPControlNode(object):
             # 	self.pub2.publish(self.eta)
             # st = self.model.predict(np.array([[self.eta, self.delta_x]]))[0]
             # self.twist.angular.z = st
-            else:
-                self.none_counter += 1
-                if self.none_counter >= 5:
-                    self.dashed_calculation = False
-                    self.experience.append(
-                        (self.delta_x, self.eta, self.twist.angular.z)
-                    )
+        #else:
+        #    self.none_counter += 1
+        #    if self.none_counter >= 5:
+        #        self.dashed_calculation = False
+        #        self.experience.append(
+        #                (self.delta_x, self.eta, self.twist.angular.z)
+        #            )
 
             self.pub.publish(self.twist)
             self.rate.sleep()

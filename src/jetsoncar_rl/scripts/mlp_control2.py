@@ -20,8 +20,9 @@ from keras.layers import Activation, Dense
 from keras.models import Sequential
 from sensor_msgs.msg import Joy
 
-clientsocket=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-clientsocket.connect(('192.168.1.84',8089))
+clientsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+clientsocket.connect(("192.168.1.84", 8089))
+
 
 class MLPControlNode(object):
     def __init__(self):
@@ -161,19 +162,34 @@ class MLPControlNode(object):
                 color_frame = frames.get_color_frame()
                 if not color_frame:
                     continue
-                
-                
+
                 self.color_image = np.asanyarray(color_frame.get_data())
-                #data = pickle.dumps(np.asanyarray(color_frame.get_data())) #pickle.dumps(color_frame.) ### new code
-                #clientsocket.sendall(struct.pack("L", len(data))+data) ### new code
+                encode_param = [
+                    int(cv2.IMWRITE_JPEG_QUALITY),
+                    90,
+                ]  # Set quality (0-100)
+                result, encoded_frame = cv2.imencode(
+                    ".jpg", self.color_image, encode_param
+                )
+                data = pickle.dumps(
+                    encoded_frame, 0
+                )  # Serialize the encoded array for transmission
+
+                message_size = struct.pack(">L", len(data))
+
+                # Send the size and then the data over the socket
+                clientsocket.sendall(message_size + data)
+
                 self.eta, self.delta_x = self.get_state_values(
                     self.color_image, self.last_eta, self.last_delta_x
-                 )
-                #self.eta = None
-                #self.delta_x = None
+                )
+                # self.eta = None
+                # self.delta_x = None
                 # self.twist.angular.z = self.P
                 # self.experience = self.experience + [(self.delta_x, self.eta, self.twist.angular.z)]
-                self.experience.append((self.delta_x, self.eta, self.twist.angular.z, self.frame_counter))
+                self.experience.append(
+                    (self.delta_x, self.eta, self.twist.angular.z, self.frame_counter)
+                )
 
                 if self.eta and self.delta_x:
                     self.last_eta = self.eta
@@ -210,8 +226,8 @@ class MLPControlNode(object):
                         exp_doc.write("%.8f" % j)
                     else:
                         exp_doc.write(str(j))
-                    exp_doc.write('\t')
-                exp_doc.write('\n')
+                    exp_doc.write("\t")
+                exp_doc.write("\n")
 
 
 if __name__ == "__main__":

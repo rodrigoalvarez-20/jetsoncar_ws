@@ -3,7 +3,7 @@
 <package format="3">
   <name>jetsoncar_v2</name>
   <version>0.0.1</version>
-  <description>Proyecto para un carrito RC, deteccion de objetos y varios modelos de ML & DL</description>
+  <description>Proyecto para un carrito RC, deteccion de objetos y varios modelos de ML y DL</description>
   <maintainer email="rodrigoalvarez449@gmail.com">Rodrigo</maintainer>
   <license>Apache-2.0</license>
 

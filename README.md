@@ -7,3 +7,8 @@ cmake .. \
 
 make -j$(nproc)
 sudo make install
+
+
+ros2 launch realsense2_camera rs_launch.py \
+	rgb_camera.profile:=640x480x30 \
+	rgb_camera.format:=RGB8

@@ -1,8 +1,0 @@
-prefix=/home/ubuntu/jetsoncar_ws/devel
-
-Name: rosserial_mbed
-Description: Description of rosserial_mbed
-Version: 0.7.7
-Cflags: -I/home/ubuntu/jetsoncar_ws/devel/include
-Libs: -L/home/ubuntu/jetsoncar_ws/devel/lib 
-Requires: message_runtime

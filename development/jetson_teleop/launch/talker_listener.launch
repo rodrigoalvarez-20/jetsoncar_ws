@@ -1,7 +1,0 @@
-<launch>
-    <!-- Runnnig talker node -->
-    <node pkg="jetson_teleop" type="talker.py" name="talker"/>
-
-    <!-- Runnnig listener node -->
-    <node pkg="jetson_teleop" type="listener.py" name="listener"/>
-</launch>

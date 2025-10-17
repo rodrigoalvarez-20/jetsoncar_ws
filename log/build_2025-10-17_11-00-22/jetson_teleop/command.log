@@ -1,0 +1,2 @@
+Invoking command in '/home/jetson/jetsoncar_ws/build/jetson_teleop': /usr/bin/cmake /home/jetson/jetsoncar_ws/development/jetson_teleop -DCMAKE_INSTALL_PREFIX=/home/jetson/jetsoncar_ws/install/jetson_teleop
+Invoked command in '/home/jetson/jetsoncar_ws/build/jetson_teleop' returned '1': /usr/bin/cmake /home/jetson/jetsoncar_ws/development/jetson_teleop -DCMAKE_INSTALL_PREFIX=/home/jetson/jetsoncar_ws/install/jetson_teleop

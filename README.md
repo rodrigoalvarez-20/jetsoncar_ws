@@ -8,7 +8,11 @@ cmake .. \
 make -j$(nproc)
 sudo make install
 
+Trae truco
+rosdep install -i --from-path src --skip-keys="librealsense2" --rosdistro humble -y
 
 ros2 launch realsense2_camera rs_launch.py \
 	rgb_camera.profile:=640x480x30 \
 	rgb_camera.format:=RGB8
+
+ros2 launch jetsoncar_v2 stream_image_subscriber.py --ros-args -r streaming_host:=192.168.1.14 -r streaming_port:=8089

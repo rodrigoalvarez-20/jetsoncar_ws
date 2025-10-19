@@ -1,5 +1,6 @@
 from setuptools import find_packages, setup
-
+from glob import glob
+import os
 package_name = 'jetsoncar_v2'
 
 setup(
@@ -10,6 +11,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -24,6 +26,9 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            "local_image = jetsoncar_v2.local_image_subscriber:main",
+            "server_image = jetsoncar_v2.stream_image_subscriber:main",
+            "rc_car_vanilla = jetsoncar_v2.rc_car_vanilla:main",
         ],
     },
 )

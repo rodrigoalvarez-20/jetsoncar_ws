@@ -19,9 +19,14 @@ class RCCarVanilla(Node):
         self.declare_parameter('bridge_baudrate', 115200)
         self.device = None
         self.rc_bridge = serial.Serial(self.get_parameter("bridge_port").value, int(
-            self.get_parameter("bridge_baudrate").value), timeout=1)
+            self.get_parameter("bridge_baudrate").value), timeout=5)
+        
+        
+        sleep(5)
+        
         self._steering_value = 90
         self._throttle_value = 90
+        self.__claxon = 0
         self._is_break_active = False
         self._is_reverse_active = False
         self.left_stick_drift = float(
@@ -62,6 +67,19 @@ class RCCarVanilla(Node):
             self._throttle_value = throttle_value
             # Enviar nuevo valor al arduino
             self.__send_controls__(self.steering_value, throttle_value)
+    
+    
+    @property
+    def claxon(self):
+        return self.__claxon
+
+    @claxon.setter
+    def claxon(self, claxon_value):
+        if self.__claxon != claxon_value:
+            self.__claxon = claxon_value
+            # self.get_logger().info("New Steering Value... | {}".format(steering_value))
+            self.__send_claxon__()
+            # Enviar nuevo valor al arduino
 
     def connect_to_device(self):
         while not self.device:
@@ -77,6 +95,8 @@ class RCCarVanilla(Node):
             controller.left_trigger.on_change(self.on_left_trigger)
             controller.left_stick_x.on_change(self.on_left_stick_x_changed)
             controller.right_trigger.on_change(self.on_right_trigger)
+            controller.btn_circle.on_down(self.on_circle_press)
+            controller.btn_circle.on_up(self.on_circle_release)
             # register the error callback
             controller.on_error(self.on_error)
             controller.lightbar.set_color_red()
@@ -93,6 +113,12 @@ class RCCarVanilla(Node):
 
     def stop(self):
         pass
+    
+    def on_circle_press(self):
+        self.claxon = "1"
+        
+    def on_circle_release(self):
+        self.claxon = "0"
 
     def on_left_trigger(self, value):
         self.get_logger().debug("left trigger changed: {}".format(value))
@@ -151,15 +177,15 @@ class RCCarVanilla(Node):
         self.get_logger().error(f'Opps! an error occured: {error}')
 
     def __test_bridge__(self):
-        test_angles = [90, 135, 105, 90, 75, 45]
+        test_angles = [90, 135, 105, 90, 75, 45, 90]
         # Probamos direccion
         for angle in test_angles:
             self.__send_controls__(angle, 90)
             sleep(0.5)
         # Probamos velocidad
-        for angle in test_angles:
-            self.__send_controls__(90, angle)
-            sleep(0.5)
+        #for angle in test_angles:
+        #    self.__send_controls__(90, angle)
+        #    sleep(0.5)
 
     def __send_controls__(self, steering, throttle):
         """
@@ -168,8 +194,18 @@ class RCCarVanilla(Node):
         """
         cmd = "{},{}\n".format(steering, throttle)
         if self.rc_bridge and self.rc_bridge.isOpen():
-            self.get_logger().debug("Enviando datos: {}".format(cmd))
+            #self.get_logger().info("Enviando datos: {}".format(cmd))
             self.rc_bridge.write(cmd.encode())
+            #sleep(0.01)
+        else:
+            self.get_logger().warning("No Bridge connection to send command. Skipping...")
+            
+    def __send_claxon__(self):
+        if self.rc_bridge and self.rc_bridge.isOpen():
+            cmd = "B:{}\n".format(self.claxon)
+            #self.get_logger().info("Enviando datos: {}".format(cmd))
+            self.rc_bridge.write(cmd.encode())
+            #sleep(0.01)
         else:
             self.get_logger().warning("No Bridge connection to send command. Skipping...")
 
@@ -188,7 +224,7 @@ def main(args=None):
     # Use a try/finally block for clean shutdown
     try:
         rclpy.spin(rc_car_subscriber)
-        sleep(0.001)
+        sleep(0.01)
     except KeyboardInterrupt:
         if rc_car_subscriber.device:
             rc_car_subscriber.device.deactivate()

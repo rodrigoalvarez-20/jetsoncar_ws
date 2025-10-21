@@ -5,6 +5,7 @@ Servo throttleServo;
 
 const int steeringPin = 9;
 const int throttlePin = 10;
+const int claxonPin = 8;
 
 int steeringAngle = 90;
 int throttleAngle = 90;
@@ -16,7 +17,8 @@ void setup() {
   throttleServo.attach(throttlePin);
   steeringServo.write(steeringAngle);
   throttleServo.write(throttleAngle);
-  Serial.println("Arduino ready: send 'steering,throttle' (e.g. 120,95)");
+  //Serial.println("Arduino ready: send 'steering,throttle' (e.g. 120,95)");
+  pinMode(claxonPin, OUTPUT);
 }
 
 void loop() {
@@ -36,7 +38,20 @@ void loop() {
 void processCommand(String cmd) {
   cmd.trim();
   int commaIndex = cmd.indexOf(',');
-  if (commaIndex == -1) return;  // invalid format
+  if (commaIndex == -1){
+    // Posible claxon
+    if (cmd.startsWith("B:")){
+      char clx = cmd[2];
+      if (clx == '1'){
+        tone(claxonPin, 920);
+      }else{
+        noTone(claxonPin);
+      }
+      return;
+    }else{
+      return;
+    }
+  }
 
   String sSteering = cmd.substring(0, commaIndex);
   String sThrottle = cmd.substring(commaIndex + 1);
@@ -50,6 +65,6 @@ void processCommand(String cmd) {
   steeringAngle = steeringVal;
   throttleAngle = throttleVal;
 
-  Serial.print("Steering="); Serial.print(steeringVal);
-  Serial.print(" | Throttle="); Serial.println(throttleVal);
+  //Serial.print("Steering="); Serial.print(steeringVal);
+  //Serial.print(" | Throttle="); Serial.println(throttleVal);
 }

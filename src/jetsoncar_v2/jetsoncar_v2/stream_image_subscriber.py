@@ -7,7 +7,10 @@ import rclpy
 from cv_bridge import CvBridge
 from rclpy.node import Node
 from sensor_msgs.msg import Image
-
+from ultralytics import YOLO
+import os
+#from PIL import Image
+#import numpy as np
 
 class StreamImageSubscriber(Node):
     """
@@ -25,7 +28,7 @@ class StreamImageSubscriber(Node):
             '/camera/color/image_raw',  # The topic published by the RealSense node
             self.listener_callback,
             10)
-        
+        self.yolo_model = YOLO("yolo11n.pt")
         # Used to convert ROS Image messages to OpenCV images
         self.br = CvBridge()
         socket_ip = self.get_parameter('streaming_host').value
@@ -49,7 +52,12 @@ class StreamImageSubscriber(Node):
         try:
             # Convert ROS Image message to OpenCV image
             current_frame = self.br.imgmsg_to_cv2(data, desired_encoding='bgr8')
-            _, encoded_frame = cv2.imencode(".jpg", current_frame, self.ENCODING_PARAMS)
+            yolo_out = self.yolo_model.predict(source=current_frame, save=True, conf=0.85, verbose=False)
+            
+            out_file = os.path.join(yolo_out[0].save_dir, yolo_out[0].path)
+            img_ann = cv2.imread(out_file)
+            #_, encoded_frame = cv2.imencode(".jpg", current_frame, self.ENCODING_PARAMS)
+            _, encoded_frame = cv2.imencode(".jpg", img_ann, self.ENCODING_PARAMS)
             # Serialize the encoded array for transmission
             data = pickle.dumps(encoded_frame, 0)
             # Prepend the size of the data payload

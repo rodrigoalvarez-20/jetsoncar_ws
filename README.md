@@ -54,3 +54,6 @@ ros2 run jetsoncar_v2 rc_car_vanilla
 
 
 docker run --rm -it --network=host bluenviron/mediamtx:1
+
+
+Para el lidar, ocupa el Sweep-sdk de SweepSnow

@@ -116,9 +116,11 @@ class RCCarVanilla(Node):
     
     def on_circle_press(self):
         self.claxon = "1"
+        self.device.lightbar.set_color_green()
         
     def on_circle_release(self):
         self.claxon = "0"
+        self.device.lightbar.set_color_red()
 
     def on_left_trigger(self, value):
         self.get_logger().debug("left trigger changed: {}".format(value))
@@ -131,8 +133,23 @@ class RCCarVanilla(Node):
             self._is_reverse_active = False
             
     def on_right_trigger(self, value):
-        actual_value = value
         value_no_drift = value - self.right_trigger_drift
+        if value_no_drift > 0.1:
+            self.device.right_rumble.set(self.rescale_input(value_no_drift, 0, 1, 100, 180))
+            self.device.left_rumble.set(self.rescale_input(value_no_drift, 0, 1, 100, 180))
+        else:
+            self.device.right_rumble.set(0)
+            self.device.left_rumble.set(0)
+        
+        if value_no_drift > 0.1 and value_no_drift <= 0.45:
+            self.device.right_trigger.effect.soft_rigidity()
+        elif value_no_drift > 0.45 and value_no_drift <= 0.75:
+            self.device.right_trigger.effect.medium_rigidity()
+        elif value_no_drift > 0.75 and value_no_drift <= 1.0:
+            self.device.right_trigger.effect.max_rigidity()
+        else:
+            self.device.right_trigger.effect.no_resistance()
+        
         if self._is_reverse_active:
             self.get_logger().info("Moviendose de reversa")
             throttle_value = 90 - self.rescale_input(value_no_drift, input_min_value=0, rescale_min_value=0)

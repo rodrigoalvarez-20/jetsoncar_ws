@@ -1,9 +1,10 @@
 <launch>
     <include file="$(find-pkg-share realsense2_camera)/launch/rs_launch.py"/>
     <node pkg="jetsoncar_v2" exec="rc_car_vanilla" name="rc_car_control" namespace="jetsoncar" />
-    <node pkg="realsense2_camera" exec="rs_launch" name="vision_publisher" namespace="jetsoncar">
-        <param name="rgb_camera.profile" value="640x480x30" />
+    <node pkg="realsense2_camera" exec="realsense2_camera_node" name="camera" namespace="camera">
+        <param name="rgb_camera.profile" value="848x480x30" />
         <param name="rgb_camera.format" value="RGB8" />
+        <param name="reconnect_timeout" value="5.0" />
     </node>
     <node pkg="jetsoncar_v2" exec="server_image" name="stream_subscriber" namespace="jetsoncar">
         <param name="streaming_host" value="192.168.1.14" />

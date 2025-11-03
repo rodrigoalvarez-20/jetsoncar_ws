@@ -1,6 +1,3 @@
-// License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2022 Intel Corporation. All Rights Reserved.
-
 #include <ros_utils.h>
 #include <algorithm>
 #include <map>
@@ -40,9 +37,7 @@ std::string rs2_to_ros(std::string rs2_name)
         {"Stereo Module", "Depth Module"},
         {"L500 Depth Sensor", "Depth Module"} ,
         {"Pointcloud (SSE3)", "Pointcloud"},
-    {"Pointcloud (CUDA)", "Pointcloud"},
         {"Align (SSE3)", "Align Depth"},
-    {"Align (CUDA)", "Align Depth"},
         {"Depth to Disparity", "disparity filter"},
         {"Depth Visualization", "colorizer"}
     };

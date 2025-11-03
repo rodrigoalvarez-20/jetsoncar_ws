@@ -10,7 +10,7 @@ cmake .. \
 make -j$(nproc)
 sudo make install
 
-Y El librealsense-ros-4.0.3
+Y El librealsense-ros-4.0.3 --> Este repo trae el 4.51.1 --> Funciona
 Aplicale los parches en el Cmake de camera
 Cambia la version y agrega el humble
 
@@ -27,6 +27,12 @@ Ya con eso limpia el area y recompila
 
 ### Lanzar el realsense como nodo independiente
 ros2 launch realsense2_camera rs_launch.py \
+    enable_infra1:=false \
+    enable_infra2:=false \
+    enable_infra:=false \
+    enable_depth:=false \
+    enable_gyro:=false \
+    enable_accel:=false \
 	rgb_camera.profile:=320x180x30 \
 	rgb_camera.format:=RGB8
 
@@ -41,19 +47,34 @@ ros2 run jetsoncar_v2 server_image --ros-args -p streaming_host:=192.168.1.14 -p
 ### V2 del subscriptor -- RTMP * FFMPEG
 
 ros2 run jetsoncar_v2 server_image --ros-args \
-    -p stream_host:="192.168.1.15" \
+    -p stream_host:="192.168.1.52" \
     -p stream_port:=8554 \
     -p stream_path:="stream/detections" \
     -p stream_fps:=30 \
-    -p stream_res:="640x480"
+    -p stream_res:="320x180" \
+    -p stream_output_scale:="640x480" \
+    -p use_yolo:=0 \
+    -p yolo_model:="models/yolo11n_320_half_nms_cuda_21.onnx"
 
+stream_res es la resolucion en el servicio del realsense
 
 ### Lanzar carrito
-ros2 run jetsoncar_v2 rc_car_vanilla
+ros2 run jetsoncar_v2 rc_car_vanilla --ros-args -p left_stick_drift:=0.1
 
 
-
+# Lanzar retransmision
 docker run --rm -it --network=host bluenviron/mediamtx:1
 
 
 Para el lidar, ocupa el Sweep-sdk de SweepSnow
+
+
+ros2 run jetsoncar_v2 server_camera --ros-args \
+    -p stream_host:="192.168.1.52" \
+    -p stream_port:=8554 \
+    -p stream_path:="stream/detections" \
+    -p stream_fps:=20 \
+    -p stream_res:="1080x720" \
+    -p stream_output_scale:="720x680" \
+    -p use_yolo:=0 \
+    -p yolo_model:="models/yolo11n_320_half_nms_cuda_21.onnx"

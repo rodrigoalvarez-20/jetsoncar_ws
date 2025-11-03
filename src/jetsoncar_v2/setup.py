@@ -29,6 +29,7 @@ setup(
             "local_image = jetsoncar_v2.local_image_subscriber:main",
             "server_image = jetsoncar_v2.stream_image_subscriber:main",
             "rc_car_vanilla = jetsoncar_v2.rc_car_vanilla:main",
+            "server_camera = jetsoncar_v2.stream_camera_subscriber:main"
         ],
     },
 )

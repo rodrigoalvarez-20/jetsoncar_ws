@@ -1,29 +1,13 @@
-#import pickle
-#import socket
-#import struct
-
-# from time import sleep
-
-import cv2
 import rclpy
-from cv_bridge import CvBridge
 from rclpy.node import Node
-from sensor_msgs.msg import Image
+from time import sleep
+import cv2
 import subprocess
-
-
-# from ultralytics import YOLO
 import onnxruntime as ort
 import numpy as np
 
-
-class StreamImageSubscriber(Node):
-    """
-    ROS 2 Node to subscribe to the /camera/color/image_raw topic
-    and display the video stream using OpenCV.
-    """
-
-    ENCODING_PARAMS = [int(cv2.IMWRITE_JPEG_QUALITY), 90]
+class StreamCameraSubscriber(Node):
+    
     ONNX_SESSION_OPTS = ort.SessionOptions()
     ONNX_SESSION_OPTS.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
 
@@ -109,9 +93,9 @@ class StreamImageSubscriber(Node):
         78: "hair drier",
         79: "toothbrush",
     }
-
+    
     def __init__(self):
-        super().__init__("stream_image_subscriber")
+        super().__init__("stream_camera_subscriber")
         # self.declare_parameter("streaming_host", "127.0.0.1")
         # self.declare_parameter("streaming_port", 8089)
         self.declare_parameter("use_yolo", 0)
@@ -122,13 +106,27 @@ class StreamImageSubscriber(Node):
         self.declare_parameter("stream_fps", 30)
         self.declare_parameter("stream_res", "640x480")
         self.declare_parameter("stream_output_scale", "640x480")
-        self.subscription = self.create_subscription(
-            Image,
-            "/camera/color/image_raw",  # The topic published by the RealSense node
-            self.listener_callback,
-            10,
-        )
+        
+        local_camera = cv2.VideoCapture(0)
+        
+        while not local_camera.isOpened():
+            self.get_logger().error("Error al conectar con la camara...")
+            self.get_logger().info("Reintentando conexion")
+            local_camera = cv2.VideoCapture(0)
+            sleep(3)
+            
+        # Request resolution
+        req_width, req_height = map(int, self.get_parameter("stream_res").value.split('x'))
+        local_camera.set(cv2.CAP_PROP_FRAME_WIDTH, req_width)
+        local_camera.set(cv2.CAP_PROP_FRAME_HEIGHT, req_height)
 
+        # Get actual resolution from camera
+        width = int(local_camera.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(local_camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        print(f"Actual camera resolution: {width}x{height}")
+
+        self.local_camera = local_camera
+    
         self.yolo_model = None
         self.model_input_height = None
         self.model_input_width = None
@@ -144,23 +142,19 @@ class StreamImageSubscriber(Node):
             self.model_input_width = self.yolo_model.get_inputs()[0].shape[-1]
             self.model_input_height = self.yolo_model.get_inputs()[0].shape[-2]
             self.model_input_names = self.yolo_model.get_inputs()[0].name
-        
-        # Used to convert ROS Image messages to OpenCV images
-        self.br = CvBridge()
+
         stream_host = self.get_parameter("stream_host").value
         stream_port = self.get_parameter("stream_port").value
         stream_path = self.get_parameter("stream_path").value
         stream_url = "rtsp://{}:{}/{}".format(stream_host,
                                               stream_port, stream_path)
 
-        stream_res = self.get_parameter("stream_res").value
-        
         rtsp_command = [
             'ffmpeg',
             '-re',  # Read input at native frame rate
             '-f', 'rawvideo',
             '-pix_fmt', 'bgr24',
-            '-s', stream_res,
+            '-s', f"{width}x{height}",
             '-r', str(self.get_parameter("stream_fps").value),
             '-i', '-',
             "-vf", "scale={}".format(str(self.get_parameter("stream_output_scale").value.replace("x", ":"))),
@@ -173,16 +167,14 @@ class StreamImageSubscriber(Node):
             stream_url
         ]
 
-        # print(" ".join(rtsp_command))
-
-        # self.get_logger().info(rtsp_command)
-
         self.rtsp_proto = subprocess.Popen(rtsp_command, stdin=subprocess.PIPE)
+        
+        self.__stream_data__()
         
     def __make_inference__(self, frame):
         # self.get_logger().info("Detecting objects...")
-        scale_x = 1 #frame.shape[1] / self.model_input_width
-        scale_y = 1 #frame.shape[0] / self.model_input_height
+        scale_x = frame.shape[1] / self.model_input_width
+        scale_y = frame.shape[0] / self.model_input_height
         rsz_frame = cv2.resize(frame, (self.model_input_height, self.model_input_width))
         rsz_frame = rsz_frame.astype(np.float32) / 255.0
         rsz_frame = np.expand_dims(rsz_frame, axis=0)
@@ -198,53 +190,51 @@ class StreamImageSubscriber(Node):
             y2 = int(y2 * scale_y)
             cls_tk = int(cls_tk)
             color = (0, 255, 0)  # green
-            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-            #cv2.putText(
-            #    frame,
-            #    "Class: {}".format(self.MODEL_CLASES.get(cls_tk)),
-            #    (x1, max(0, y1 - 10)),
-            #    cv2.FONT_HERSHEY_SIMPLEX,
-            #    0.5,
-            #    color,
-            #    2,
-            #)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 1)
+            cv2.putText(
+                frame,
+                "Class: {}".format(self.MODEL_CLASES.get(cls_tk)),
+                (x2 - 10, max(0, y2 - 10)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                color,
+                1,
+            )
         return frame
-
-    def listener_callback(self, data):
-        """
-        Callback function that processes the received Image message.
-        """
-        self.get_logger().debug("Receiving video frame")
-
-        try:
-            # Convert ROS Image message to OpenCV image
-            current_frame = self.br.imgmsg_to_cv2(
-                data, desired_encoding="bgr8")
-            # self.get_logger().info(self.yolo_model)
+        
+    def __stream_data__(self):
+        
+        while True:
+            ret, current_frame = self.local_camera.read()
+            
             if self.yolo_model:
                 current_frame = self.__make_inference__(current_frame)
-
-            self.rtsp_proto.stdin.write(current_frame.tobytes())
-
-        except Exception as e:
-            self.get_logger().error(f"Error converting or sending image: {e}")
-
-
+            
+            if ret: # If frame not read correctly, break the loop
+                self.rtsp_proto.stdin.write(current_frame.tobytes())
+            else:
+                self.get_logger().warning("No frame end. Skipping...")
+        
 def main(args=None):
     rclpy.init(args=args)
-    image_subscriber = StreamImageSubscriber()
+    local_cam_subs = StreamCameraSubscriber()
 
     # Use a try/finally block for clean shutdown
     try:
-        rclpy.spin(image_subscriber)
+        rclpy.spin(local_cam_subs)
+        sleep(0.01)
     except KeyboardInterrupt:
-        pass
+        if local_cam_subs.local_camera:
+            local_cam_subs.local_camera.release()
+        cv2.destroyAllWindows()
+    except Exception as ex:
+        if local_cam_subs.local_camera:
+            local_cam_subs.local_camera.release()
+        cv2.destroyAllWindows()
 
     # Destroy the node and shutdown ROS 2
-    image_subscriber.destroy_node()
     rclpy.shutdown()
-    cv2.destroyAllWindows()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

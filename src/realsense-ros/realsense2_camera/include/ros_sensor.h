@@ -1,6 +1,3 @@
-// License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2022 Intel Corporation. All Rights Reserved.
-
 #pragma once
 
 #include <librealsense2/rs.hpp>
@@ -70,8 +67,7 @@ namespace realsense2_camera
                       std::function<void()> hardware_reset_func, 
                       std::shared_ptr<diagnostic_updater::Updater> diagnostics_updater,
                       rclcpp::Logger logger,
-                      bool force_image_default_qos = false,
-                      bool is_rosbag_file = false);
+                      bool force_image_default_qos = false);
             ~RosSensor();
             void registerSensorParameters();
             bool getUpdatedProfiles(std::vector<rs2::stream_profile>& wanted_profiles);
@@ -89,7 +85,7 @@ namespace realsense2_camera
 
         private:
             void setupErrorCallback();
-            void setParameters(bool is_rosbag_file = false);
+            void setParameters();
             void clearParameters();
             void set_sensor_auto_exposure_roi();
             void registerAutoExposureROIOptions();

@@ -2,7 +2,6 @@ import rclpy
 from rclpy.node import Node
 from time import sleep
 from dualsense_controller import DualSenseController
-import math
 import serial
 
 
@@ -194,7 +193,7 @@ class RCCarVanilla(Node):
         self.get_logger().error(f'Opps! an error occured: {error}')
 
     def __test_bridge__(self):
-        test_angles = [90, 135, 105, 90, 75, 45, 90]
+        test_angles = [80, 135, 105, 80, 75, 45, 80]
         # Probamos direccion
         for angle in test_angles:
             self.__send_controls__(angle, 90)

@@ -1,6 +1,3 @@
-// License: Apache 2.0. See LICENSE file in root directory.
-// Copyright(c) 2022 Intel Corporation. All Rights Reserved.
-
 #include <dynamic_params.h>
 
 namespace realsense2_camera
@@ -103,9 +100,7 @@ namespace realsense2_camera
         try
         {
             ROS_DEBUG_STREAM("setParam::Setting parameter: " << param_name);
-#if defined(DASHING) || defined(ELOQUENT) || defined(FOXY)
-            //do nothing for old versions
-#else
+#if defined(GALACTIC) || defined(ROLLING)
             descriptor.dynamic_typing=true; // Without this, undeclare_parameter() throws in Galactic onward.
 #endif
             if (!_node.get_parameter(param_name, result_value))

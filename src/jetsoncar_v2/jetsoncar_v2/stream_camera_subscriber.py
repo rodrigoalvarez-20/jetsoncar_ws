@@ -6,10 +6,13 @@ import subprocess
 import onnxruntime as ort
 import numpy as np
 
+
 class StreamCameraSubscriber(Node):
-    
+
     ONNX_SESSION_OPTS = ort.SessionOptions()
-    ONNX_SESSION_OPTS.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+    ONNX_SESSION_OPTS.graph_optimization_level = (
+        ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+    )
 
     MODEL_CLASES = {
         0: "person",
@@ -93,7 +96,7 @@ class StreamCameraSubscriber(Node):
         78: "hair drier",
         79: "toothbrush",
     }
-    
+
     def __init__(self):
         super().__init__("stream_camera_subscriber")
         # self.declare_parameter("streaming_host", "127.0.0.1")
@@ -101,32 +104,34 @@ class StreamCameraSubscriber(Node):
         self.declare_parameter("use_yolo", 0)
         self.declare_parameter("yolo_model", "models/yolo11m.pt")
         self.declare_parameter("stream_host", "0.0.0.0")
-        self.declare_parameter("stream_port", 1935)
-        self.declare_parameter("stream_path", "stream/detections")
+        self.declare_parameter("stream_port", "")
+        self.declare_parameter("stream_path", "live/stream")
         self.declare_parameter("stream_fps", 30)
         self.declare_parameter("stream_res", "640x480")
         self.declare_parameter("stream_output_scale", "640x480")
-        
+
         local_camera = cv2.VideoCapture(0)
-        
+
         while not local_camera.isOpened():
             self.get_logger().error("Error al conectar con la camara...")
             self.get_logger().info("Reintentando conexion")
             local_camera = cv2.VideoCapture(0)
             sleep(3)
-            
+
         # Request resolution
-        req_width, req_height = map(int, self.get_parameter("stream_res").value.split('x'))
+        req_width, req_height = map(
+            int, self.get_parameter("stream_res").value.split("x")
+        )
         local_camera.set(cv2.CAP_PROP_FRAME_WIDTH, req_width)
         local_camera.set(cv2.CAP_PROP_FRAME_HEIGHT, req_height)
 
         # Get actual resolution from camera
-        width = int(local_camera.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(local_camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        print(f"Actual camera resolution: {width}x{height}")
+        camera_width = int(local_camera.get(cv2.CAP_PROP_FRAME_WIDTH))
+        camera_height = int(local_camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        print(f"Actual camera resolution: {camera_width}x{camera_height}")
 
         self.local_camera = local_camera
-    
+
         self.yolo_model = None
         self.model_input_height = None
         self.model_input_width = None
@@ -136,8 +141,7 @@ class StreamCameraSubscriber(Node):
             self.yolo_model = ort.InferenceSession(
                 self.get_parameter("yolo_model").value,
                 sess_options=self.ONNX_SESSION_OPTS,
-                providers=["TensorrtExecutionProvider",
-                           "CUDAExecutionProvider"],
+                providers=["TensorrtExecutionProvider", "CUDAExecutionProvider"],
             )
             self.model_input_width = self.yolo_model.get_inputs()[0].shape[-1]
             self.model_input_height = self.yolo_model.get_inputs()[0].shape[-2]
@@ -146,31 +150,46 @@ class StreamCameraSubscriber(Node):
         stream_host = self.get_parameter("stream_host").value
         stream_port = self.get_parameter("stream_port").value
         stream_path = self.get_parameter("stream_path").value
-        stream_url = "rtsp://{}:{}/{}".format(stream_host,
-                                              stream_port, stream_path)
+        stream_url = "rtmp://{}{}/{}".format(stream_host, stream_port, stream_path)
 
-        rtsp_command = [
-            'ffmpeg',
-            '-re',  # Read input at native frame rate
-            '-f', 'rawvideo',
-            '-pix_fmt', 'bgr24',
-            '-s', f"{width}x{height}",
-            '-r', str(self.get_parameter("stream_fps").value),
-            '-i', '-',
-            "-vf", "scale={}".format(str(self.get_parameter("stream_output_scale").value.replace("x", ":"))),
-            '-c:v', 'libx264',
-            '-preset', 'veryfast',
-            '-tune', 'zerolatency',
-            '-pix_fmt', 'yuv420p',
-            '-f', 'rtsp',
-            '-rtsp_transport', 'tcp',  # Use TCP for reliability
-            stream_url
+        stream_res = self.get_parameter("stream_res").value
+        stream_w, stream_h = stream_res.split("x")
+        stream_fps = str(self.get_parameter("stream_fps").value)
+
+        self.get_logger().info("Streaming to: {}".format(stream_url))
+        #ffmpeg_cmd = [
+        #    "ffmpeg",
+        #    "-re",
+        #    "-f", "rawvideo",
+        #    "-pix_fmt", "bgr24",
+        #    "-s", "{}x{}".format(camera_width, camera_height),
+        #    "-r", str(stream_fps),
+        #    "-i", "-",                     # read frames from stdin
+        #    "-vf", "scale={}".format(str(self.get_parameter("stream_output_scale").value.replace("x", ":"))),
+        #    "-c:v", "libx264",
+        #    "-preset", "ultrafast",
+        #    "-tune", "zerolatency",
+        #    "-x264-params", "keyint=30:min-keyint=30:no-scenecut=1",
+        #    "-f", "flv",
+        #    stream_url
+        #]
+        
+        gst_cmd = [
+            "gst-launch-1.0",
+            "fdsrc", "fd=0",
+            "!", "rawvideoparse", "format=bgr", f"width={camera_width}", f"height={camera_height}", f"framerate={stream_fps}/1",
+            "!", "videoconvert",
+            "!", "nvvidconv",
+            "!", "nvh264enc", "bitrate=2000000", 'iframeinterval=15', 'insert-sps-pps=true',
+            "!", "h264parse",
+            "!", "flvmux", "streamable=true",
+            "!", "rtmpsink", f"location={stream_url}", "sync=false", "async=false"
         ]
 
-        self.rtsp_proto = subprocess.Popen(rtsp_command, stdin=subprocess.PIPE)
-        
+        self.rtsp_proto = subprocess.Popen(gst_cmd, stdin=subprocess.PIPE)
+
         self.__stream_data__()
-        
+
     def __make_inference__(self, frame):
         # self.get_logger().info("Detecting objects...")
         scale_x = frame.shape[1] / self.model_input_width
@@ -201,20 +220,21 @@ class StreamCameraSubscriber(Node):
                 1,
             )
         return frame
-        
+
     def __stream_data__(self):
-        
+
         while True:
             ret, current_frame = self.local_camera.read()
-            
+
             if self.yolo_model:
                 current_frame = self.__make_inference__(current_frame)
-            
-            if ret: # If frame not read correctly, break the loop
+
+            if ret:  # If frame not read correctly, break the loop
                 self.rtsp_proto.stdin.write(current_frame.tobytes())
             else:
                 self.get_logger().warning("No frame end. Skipping...")
-        
+
+
 def main(args=None):
     rclpy.init(args=args)
     local_cam_subs = StreamCameraSubscriber()
@@ -236,5 +256,5 @@ def main(args=None):
     rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

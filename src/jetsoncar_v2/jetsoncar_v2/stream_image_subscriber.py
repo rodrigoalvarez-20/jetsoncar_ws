@@ -117,8 +117,8 @@ class StreamImageSubscriber(Node):
         self.declare_parameter("use_yolo", 0)
         self.declare_parameter("yolo_model", "models/yolo11m.pt")
         self.declare_parameter("stream_host", "0.0.0.0")
-        self.declare_parameter("stream_port", 1935)
-        self.declare_parameter("stream_path", "stream/detections")
+        self.declare_parameter("stream_port", "")
+        self.declare_parameter("stream_path", "live/stream")
         self.declare_parameter("stream_fps", 30)
         self.declare_parameter("stream_res", "640x480")
         self.declare_parameter("stream_output_scale", "640x480")
@@ -150,34 +150,48 @@ class StreamImageSubscriber(Node):
         stream_host = self.get_parameter("stream_host").value
         stream_port = self.get_parameter("stream_port").value
         stream_path = self.get_parameter("stream_path").value
-        stream_url = "rtsp://{}:{}/{}".format(stream_host,
+        stream_url = "rtmp://{}{}/{}".format(stream_host,
                                               stream_port, stream_path)
 
         stream_res = self.get_parameter("stream_res").value
+        stream_h, stream_w = stream_res.split("x")
+        stream_fps = str(self.get_parameter("stream_fps").value)
         
-        rtsp_command = [
-            'ffmpeg',
-            '-re',  # Read input at native frame rate
-            '-f', 'rawvideo',
-            '-pix_fmt', 'bgr24',
-            '-s', stream_res,
-            '-r', str(self.get_parameter("stream_fps").value),
-            '-i', '-',
-            "-vf", "scale={}".format(str(self.get_parameter("stream_output_scale").value.replace("x", ":"))),
-            '-c:v', 'libx264',
-            '-preset', 'veryfast',
-            '-tune', 'zerolatency',
-            '-pix_fmt', 'yuv420p',
-            '-f', 'rtsp',
-            '-rtsp_transport', 'tcp',  # Use TCP for reliability
-            stream_url
+        #rtsp_command = [
+        #    'ffmpeg',
+        #    '-re',  # Read input at native frame rate
+        #    '-f', 'rawvideo',
+        #    '-pix_fmt', 'bgr24',
+        #    '-s', stream_res,
+        #    '-r', str(self.get_parameter("stream_fps").value),
+        #    '-i', '-',
+        #    "-vf", "scale={}".format(str(self.get_parameter("stream_output_scale").value.replace("x", ":"))),
+        #    '-c:v', 'libx264',
+        #    '-preset', 'veryfast',
+        #    '-tune', 'zerolatency',
+        #    '-pix_fmt', 'yuv420p',
+        #    '-f', 'rtsp',
+        #    '-rtsp_transport', 'tcp',  # Use TCP for reliability
+        #    stream_url
+        #]
+        
+        gst_cmd = [
+            "gst-launch-1.0", "-v",
+            "appsrc", "format=time", "is-live=true", "block=true",
+            f"caps=video/x-raw,format=BGR,width={stream_w},height={stream_h},framerate={stream_fps}/1",
+            "!", "videoconvert",
+            "!", "video/x-raw,format=I420",
+            "!", "nvv4l2h264enc", "bitrate=800000", "iframeinterval=30", "preset-level=1", "insert-sps-pps=true",
+            "!", "h264parse",
+            "!", "flvmux", "streamable=true",
+            "!", f"rtmpsink", f"location={stream_url} live=1"
         ]
 
         # print(" ".join(rtsp_command))
 
         # self.get_logger().info(rtsp_command)
 
-        self.rtsp_proto = subprocess.Popen(rtsp_command, stdin=subprocess.PIPE)
+        self.rtsp_proto = subprocess.Popen(gst_cmd, stdin=subprocess.PIPE)
         
     def __make_inference__(self, frame):
         # self.get_logger().info("Detecting objects...")

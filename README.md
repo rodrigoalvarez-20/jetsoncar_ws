@@ -71,8 +71,8 @@ Para el lidar, ocupa el Sweep-sdk de SweepSnow
 
 ros2 run jetsoncar_v2 server_camera --ros-args \
     -p stream_host:="192.168.1.52" \
-    -p stream_port:=8554 \
-    -p stream_path:="stream/detections" \
+    -p stream_port:="" \
+    -p stream_path:="live/stream" \
     -p stream_fps:=20 \
     -p stream_res:="1080x720" \
     -p stream_output_scale:="720x680" \

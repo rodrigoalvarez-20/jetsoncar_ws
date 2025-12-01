@@ -1,14 +1,11 @@
 import rclpy
 from rclpy.node import Node
-from cv_bridge import CvBridge
-from sensor_msgs.msg import Image
-import cv2
 from time import sleep
 from dualsense_controller import DualSenseController
 import serial
 
 
-class RCCarVanilla(Node):
+class RCCarManual(Node):
 
     def __init__(self):
         super().__init__('rc_car_vanilla')
@@ -19,29 +16,16 @@ class RCCarVanilla(Node):
         # Puente entre carro y Jetson (Arduino o ESP32)
         self.declare_parameter('bridge_port', "/dev/ttyACM0")
         self.declare_parameter('bridge_baudrate', 115200)
-        self.declare_parameter("load_camera", 0)
         self.device = None
         self.rc_bridge = serial.Serial(self.get_parameter("bridge_port").value, int(
             self.get_parameter("bridge_baudrate").value), timeout=5)
         
-        self.camera_sub = None
-        self.camera_bridge = None
-        self.is_recording = False
-        
-        if self.get_parameter("load_camera").value:
-            self.camera_sub = self.create_subscription(
-                Image,
-                "/color/image_raw",  # The topic published by the RealSense node
-                self.listener_callback,
-                10,
-            )
-            
-            self.camera_bridge = CvBridge()
         
         sleep(5)
         
         self._steering_value = 90
         self._throttle_value = 90
+        self.marcha = 0
         self.__claxon = 0
         self._is_break_active = False
         self._is_reverse_active = False
@@ -97,20 +81,6 @@ class RCCarVanilla(Node):
             self.__send_claxon__()
             # Enviar nuevo valor al arduino
 
-    def listener_callback(self, data):
-        """
-        Callback function that processes the received Image message.
-        """
-        #self.get_logger().info("Receiving video frame")
-
-        try:
-            # Convert ROS Image message to OpenCV image
-            current_frame = self.camera_bridge.imgmsg_to_cv2(
-                data, desired_encoding="bgr8")
-            cv2.imshow("Camara", current_frame)
-        except Exception as e:
-            self.get_logger().error(f"Error converting or sending image: {e}")
-    
     def connect_to_device(self):
         while not self.device:
             self.get_logger().info("Buscando dispositivos...")
@@ -127,6 +97,9 @@ class RCCarVanilla(Node):
             controller.right_trigger.on_change(self.on_right_trigger)
             controller.btn_circle.on_down(self.on_circle_press)
             controller.btn_circle.on_up(self.on_circle_release)
+            controller.btn_triangle.on_up(self.on_triangle_press)
+            controller.btn_cross.on_up(self.on_cross_press)
+
             # register the error callback
             controller.on_error(self.on_error)
             controller.lightbar.set_color_red()
@@ -144,10 +117,6 @@ class RCCarVanilla(Node):
     def stop(self):
         pass
     
-    def on_l1_button_press(self):
-        self.is_recording = not self.is_recording
-        self.get_logger().info("Recording is {}".format(self.is_recording))
-    
     def on_circle_press(self):
         self.claxon = "1"
         self.device.lightbar.set_color_green()
@@ -155,6 +124,22 @@ class RCCarVanilla(Node):
     def on_circle_release(self):
         self.claxon = "0"
         self.device.lightbar.set_color_red()
+        
+    def on_triangle_press(self):
+        if self.device.btn_l1.pressed:
+            if self.marcha <= 4:
+                self.marcha += 1
+                self.get_logger().info("Velocidad: {}".format(self.marcha))
+            else:
+                self.get_logger().info("Limite de Velocidad: {}".format(self.marcha))
+            
+    def on_cross_press(self):
+        if self.device.btn_l1.pressed:
+            if self.marcha >= 0:
+                self.marcha -= 1
+                self.get_logger().info("Velocidad: {}".format(self.marcha))
+            else:
+                self.get_logger().info("Limite de Velocidad: {}".format(self.marcha))
 
     def on_left_trigger(self, value):
         self.get_logger().debug("left trigger changed: {}".format(value))
@@ -175,20 +160,32 @@ class RCCarVanilla(Node):
             self.device.right_rumble.set(0)
             self.device.left_rumble.set(0)
         
-        if value_no_drift > 0.1 and value_no_drift <= 0.45:
-            self.device.right_trigger.effect.soft_rigidity()
-        elif value_no_drift > 0.45 and value_no_drift <= 0.75:
-            self.device.right_trigger.effect.medium_rigidity()
-        elif value_no_drift > 0.75 and value_no_drift <= 1.0:
-            self.device.right_trigger.effect.max_rigidity()
-        else:
-            self.device.right_trigger.effect.no_resistance()
-        
         if self._is_reverse_active:
             self.get_logger().info("Moviendose de reversa")
             throttle_value = 90 - self.rescale_input(value_no_drift, input_min_value=0, rescale_min_value=0)
         else:
-            throttle_value = 90 + self.rescale_input(value_no_drift, input_min_value=0, rescale_min_value=0)
+            if self.marcha == -1:
+                self.get_logger().info("Moviendose de reversa")
+                throttle_value = 90 - self.rescale_input(value_no_drift, input_min_value=0, rescale_min_value=0, rescale_max_value=5)
+            elif self.marcha == 0:
+                throttle_value = 90 + self.rescale_input(value_no_drift, input_min_value=0, rescale_min_value=0, rescale_max_value=0)
+                self.device.right_trigger.effect.no_resistance()
+            elif self.marcha == 1:
+                throttle_value = 90 + self.rescale_input(value_no_drift, input_min_value=0, rescale_min_value=0, rescale_max_value=5)
+                self.device.right_trigger.effect.no_resistance()
+            elif self.marcha == 2:
+                throttle_value = 90 + self.rescale_input(value_no_drift, input_min_value=0, rescale_min_value=0, rescale_max_value=10)
+                self.device.right_trigger.effect.soft_rigidity()
+            elif self.marcha == 3:
+                throttle_value = 90 + self.rescale_input(value_no_drift, input_min_value=0, rescale_min_value=0, rescale_max_value=25)
+                self.device.right_trigger.effect.medium_rigidity()
+            elif self.marcha == 4:
+                throttle_value = 90 + self.rescale_input(value_no_drift, input_min_value=0, rescale_min_value=0, rescale_max_value=32)
+                self.device.right_trigger.effect.medium_rigidity()
+            elif self.marcha == 5:
+                throttle_value = 90 + self.rescale_input(value_no_drift, input_min_value=0, rescale_min_value=0, rescale_max_value=40)
+                self.device.right_trigger.effect.max_rigidity()
+            
         self.get_logger().debug("right trigger changed: {} | {}".format(value_no_drift, throttle_value))
         self.throttle_value = throttle_value
 
@@ -270,7 +267,7 @@ class RCCarVanilla(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    rc_car_subscriber = RCCarVanilla()
+    rc_car_subscriber = RCCarManual()
 
     # Use a try/finally block for clean shutdown
     try:

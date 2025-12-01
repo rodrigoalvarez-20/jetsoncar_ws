@@ -157,36 +157,28 @@ class StreamCameraSubscriber(Node):
         stream_fps = str(self.get_parameter("stream_fps").value)
 
         self.get_logger().info("Streaming to: {}".format(stream_url))
-        #ffmpeg_cmd = [
-        #    "ffmpeg",
-        #    "-re",
-        #    "-f", "rawvideo",
-        #    "-pix_fmt", "bgr24",
-        #    "-s", "{}x{}".format(camera_width, camera_height),
-        #    "-r", str(stream_fps),
-        #    "-i", "-",                     # read frames from stdin
-        #    "-vf", "scale={}".format(str(self.get_parameter("stream_output_scale").value.replace("x", ":"))),
-        #    "-c:v", "libx264",
-        #    "-preset", "ultrafast",
-        #    "-tune", "zerolatency",
-        #    "-x264-params", "keyint=30:min-keyint=30:no-scenecut=1",
-        #    "-f", "flv",
-        #    stream_url
-        #]
-        
-        gst_cmd = [
-            "gst-launch-1.0",
-            "fdsrc", "fd=0",
-            "!", "rawvideoparse", "format=bgr", f"width={camera_width}", f"height={camera_height}", f"framerate={stream_fps}/1",
-            "!", "videoconvert",
-            "!", "nvvidconv",
-            "!", "nvh264enc", "bitrate=2000000", 'iframeinterval=15', 'insert-sps-pps=true',
-            "!", "h264parse",
-            "!", "flvmux", "streamable=true",
-            "!", "rtmpsink", f"location={stream_url}", "sync=false", "async=false"
+        ffmpeg_cmd = [
+            "ffmpeg",
+            "-re",
+            "-f", "rawvideo",
+            "-pix_fmt", "bgr24",
+            "-s", "{}x{}".format(camera_width, camera_height),
+            "-r", str(stream_fps),
+            "-i", "-",                     # read frames from stdin
+            "-vf", "scale={}".format(str(self.get_parameter("stream_output_scale").value.replace("x", ":"))),
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-tune", "zerolatency",
+            #"-profile:v", "baseline",
+            "-g", "15",                    # Short GOP = lower latency
+            "-keyint_min", "15",
+            "-bf", "0",                    # No B-frames
+            "-x264-params", "keyint=30:min-keyint=30:no-scenecut=1",
+            "-f", "flv",
+            stream_url
         ]
-
-        self.rtsp_proto = subprocess.Popen(gst_cmd, stdin=subprocess.PIPE)
+        
+        #self.rtsp_proto = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
 
         self.__stream_data__()
 
@@ -230,7 +222,8 @@ class StreamCameraSubscriber(Node):
                 current_frame = self.__make_inference__(current_frame)
 
             if ret:  # If frame not read correctly, break the loop
-                self.rtsp_proto.stdin.write(current_frame.tobytes())
+                #self.rtsp_proto.stdin.write(current_frame.tobytes())
+                cv2.imshow("Camara", current_frame)
             else:
                 self.get_logger().warning("No frame end. Skipping...")
 

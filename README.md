@@ -48,11 +48,10 @@ ros2 run jetsoncar_v2 server_image --ros-args -p streaming_host:=192.168.1.14 -p
 
 ros2 run jetsoncar_v2 server_image --ros-args \
     -p stream_host:="192.168.1.52" \
-    -p stream_port:=8554 \
-    -p stream_path:="stream/detections" \
+    -p stream_path:="live/stream" \
     -p stream_fps:=30 \
     -p stream_res:="320x180" \
-    -p stream_output_scale:="640x480" \
+    -p stream_output_scale:="320x180" \
     -p use_yolo:=0 \
     -p yolo_model:="models/yolo11n_320_half_nms_cuda_21.onnx"
 
@@ -60,6 +59,7 @@ stream_res es la resolucion en el servicio del realsense
 
 ### Lanzar carrito
 ros2 run jetsoncar_v2 rc_car_vanilla --ros-args -p left_stick_drift:=0.1
+ros2 run jetsoncar_v2 rc_car_manual --ros-args -p left_stick_drift:=0.1
 
 
 # Lanzar retransmision
@@ -71,10 +71,12 @@ Para el lidar, ocupa el Sweep-sdk de SweepSnow
 
 ros2 run jetsoncar_v2 server_camera --ros-args \
     -p stream_host:="192.168.1.52" \
-    -p stream_port:="" \
     -p stream_path:="live/stream" \
     -p stream_fps:=20 \
     -p stream_res:="1080x720" \
-    -p stream_output_scale:="720x680" \
+    -p stream_output_scale:="1080x720" \
     -p use_yolo:=0 \
     -p yolo_model:="models/yolo11n_320_half_nms_cuda_21.onnx"
+
+
+ros2 run jetsoncar_v2 rc_car_vanilla --ros-args -p left_stick_drift:=0.1 -p load_camera=1

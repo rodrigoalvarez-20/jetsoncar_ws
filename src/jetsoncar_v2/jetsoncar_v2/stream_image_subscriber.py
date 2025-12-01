@@ -124,7 +124,7 @@ class StreamImageSubscriber(Node):
         self.declare_parameter("stream_output_scale", "640x480")
         self.subscription = self.create_subscription(
             Image,
-            "/camera/color/image_raw",  # The topic published by the RealSense node
+            "/color/image_raw",  # The topic published by the RealSense node
             self.listener_callback,
             10,
         )
@@ -154,44 +154,43 @@ class StreamImageSubscriber(Node):
                                               stream_port, stream_path)
 
         stream_res = self.get_parameter("stream_res").value
-        stream_h, stream_w = stream_res.split("x")
+        stream_w, stream_h = stream_res.split("x")
         stream_fps = str(self.get_parameter("stream_fps").value)
         
-        #rtsp_command = [
-        #    'ffmpeg',
-        #    '-re',  # Read input at native frame rate
-        #    '-f', 'rawvideo',
-        #    '-pix_fmt', 'bgr24',
-        #    '-s', stream_res,
-        #    '-r', str(self.get_parameter("stream_fps").value),
-        #    '-i', '-',
-        #    "-vf", "scale={}".format(str(self.get_parameter("stream_output_scale").value.replace("x", ":"))),
-        #    '-c:v', 'libx264',
-        #    '-preset', 'veryfast',
-        #    '-tune', 'zerolatency',
-        #    '-pix_fmt', 'yuv420p',
-        #    '-f', 'rtsp',
-        #    '-rtsp_transport', 'tcp',  # Use TCP for reliability
-        #    stream_url
-        #]
         
-        gst_cmd = [
-            "gst-launch-1.0", "-v",
-            "appsrc", "format=time", "is-live=true", "block=true",
-            f"caps=video/x-raw,format=BGR,width={stream_w},height={stream_h},framerate={stream_fps}/1",
-            "!", "videoconvert",
-            "!", "video/x-raw,format=I420",
-            "!", "nvv4l2h264enc", "bitrate=800000", "iframeinterval=30", "preset-level=1", "insert-sps-pps=true",
-            "!", "h264parse",
-            "!", "flvmux", "streamable=true",
-            "!", f"rtmpsink", f"location={stream_url} live=1"
+        rtsp_command = [
+            'ffmpeg',
+            '-re',  # Read input at native frame rate
+            '-f', 'rawvideo',
+            '-pix_fmt', 'bgr24',
+            '-s', stream_res,
+            '-r', str(stream_fps),
+            '-i', '-',
+            "-vf", "scale={}:{}".format(stream_w, stream_h),
+            '-c:v', 'libx264',
+            '-preset', 'veryfast',
+            '-tune', 'zerolatency',
+            '-pix_fmt', 'yuv420p',
+            '-f', 'flv',
+            #'-rtsp_transport', 'tcp',  # Use TCP for reliability
+            stream_url
         ]
-
-        # print(" ".join(rtsp_command))
+        
+        #gst_command = [
+        #    'gst-launch-1.0',
+        #    'fdsrc', 'fd=0',
+        #    '!', 'rawvideoparse', 'format=bgr24', f'width={stream_w}', f'height={stream_h}', f'framerate={stream_fps}/1',
+        #    '!', 'videoconvert',
+        #    '!', 'nvvidconv',
+        #    '!', 'nvh264enc', 'bitrate=2000000', 'iframeinterval=15', 'insert-sps-pps=true',
+        #    '!', 'h264parse', 'config-interval=1',
+        #    '!', 'flvmux', 'streamable=true',
+        #    '!', 'rtmpsink', f'location={stream_url}'
+        #]
 
         # self.get_logger().info(rtsp_command)
 
-        self.rtsp_proto = subprocess.Popen(gst_cmd, stdin=subprocess.PIPE)
+        #self.rtsp_proto = subprocess.Popen(rtsp_command, stdin=subprocess.PIPE, bufsize=0)
         
     def __make_inference__(self, frame):
         # self.get_logger().info("Detecting objects...")
@@ -213,32 +212,31 @@ class StreamImageSubscriber(Node):
             cls_tk = int(cls_tk)
             color = (0, 255, 0)  # green
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-            #cv2.putText(
-            #    frame,
-            #    "Class: {}".format(self.MODEL_CLASES.get(cls_tk)),
-            #    (x1, max(0, y1 - 10)),
-            #    cv2.FONT_HERSHEY_SIMPLEX,
-            #    0.5,
-            #    color,
-            #    2,
-            #)
+            self.get_logger().info("Objeto {} detectado".format(self.MODEL_CLASES[int(cls_tk)]))
         return frame
 
     def listener_callback(self, data):
         """
         Callback function that processes the received Image message.
         """
-        self.get_logger().debug("Receiving video frame")
+        #self.get_logger().info("Receiving video frame")
 
         try:
             # Convert ROS Image message to OpenCV image
             current_frame = self.br.imgmsg_to_cv2(
                 data, desired_encoding="bgr8")
-            # self.get_logger().info(self.yolo_model)
+            #self.get_logger().info("Rcv frame...")
             if self.yolo_model:
                 current_frame = self.__make_inference__(current_frame)
-
-            self.rtsp_proto.stdin.write(current_frame.tobytes())
+            #self.get_logger().info("Sending frame")
+            
+            #cv2.imshow("Camara", current_frame)
+            
+            #self.rtsp_proto.stdin.write(current_frame.tobytes())
+            #try:
+            #    self.rtsp_proto.stdin.flush()
+            #except Exception:
+            #    pass
 
         except Exception as e:
             self.get_logger().error(f"Error converting or sending image: {e}")

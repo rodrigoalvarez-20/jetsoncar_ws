@@ -79,4 +79,21 @@ ros2 run jetsoncar_v2 server_camera --ros-args \
     -p yolo_model:="models/yolo11n_320_half_nms_cuda_21.onnx"
 
 
-ros2 run jetsoncar_v2 rc_car_vanilla --ros-args -p left_stick_drift:=0.1 -p load_camera=1
+ros2 run jetsoncar_v2 rc_car_vanilla --ros-args -p left_stick_drift:=0.1 -p load_camera:=1
+
+
+if value_no_drift > 0.1:
+            self.device.right_rumble.set(self.rescale_input(value_no_drift, 0, 1, 100, 180))
+            self.device.left_rumble.set(self.rescale_input(value_no_drift, 0, 1, 100, 180))
+        else:
+            self.device.right_rumble.set(0)
+            self.device.left_rumble.set(0)
+        
+        if value_no_drift > 0.1 and value_no_drift <= 0.45:
+            self.device.right_trigger.effect.soft_rigidity()
+        elif value_no_drift > 0.45 and value_no_drift <= 0.75:
+            self.device.right_trigger.effect.medium_rigidity()
+        elif value_no_drift > 0.75 and value_no_drift <= 1.0:
+            self.device.right_trigger.effect.max_rigidity()
+        else:
+            self.device.right_trigger.effect.no_resistance()

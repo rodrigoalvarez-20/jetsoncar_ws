@@ -6,7 +6,9 @@ import cv2
 from time import sleep
 from dualsense_controller import DualSenseController
 import serial
-
+from uuid import uuid4
+import os
+from queue import Queue
 
 class RCCarVanilla(Node):
 
@@ -20,6 +22,7 @@ class RCCarVanilla(Node):
         self.declare_parameter('bridge_port', "/dev/ttyACM0")
         self.declare_parameter('bridge_baudrate', 115200)
         self.declare_parameter("load_camera", 0)
+        self.declare_parameter("recording_path", "/home/jetson/jetsoncar_ws/recordings")
         self.device = None
         self.rc_bridge = serial.Serial(self.get_parameter("bridge_port").value, int(
             self.get_parameter("bridge_baudrate").value), timeout=5)
@@ -27,6 +30,8 @@ class RCCarVanilla(Node):
         self.camera_sub = None
         self.camera_bridge = None
         self.is_recording = False
+        self.frame_count = 0
+        self.record_queue = Queue()
         
         if self.get_parameter("load_camera").value:
             self.camera_sub = self.create_subscription(
@@ -38,6 +43,15 @@ class RCCarVanilla(Node):
             
             self.camera_bridge = CvBridge()
         
+        self.recording_dir = self.get_parameter("recording_path").value
+        self.execution_id = uuid4().hex[:12]
+        self.records_path = os.path.join(self.recording_dir, self.execution_id)
+        self.records_path_images = os.path.join(self.records_path, "images")
+        os.makedirs(self.recording_dir, exist_ok=True)
+        os.makedirs(self.records_path, exist_ok=True)
+        os.makedirs(self.records_path_images, exist_ok=True)
+        
+
         sleep(5)
         
         self._steering_value = 90
@@ -107,7 +121,14 @@ class RCCarVanilla(Node):
             # Convert ROS Image message to OpenCV image
             current_frame = self.camera_bridge.imgmsg_to_cv2(
                 data, desired_encoding="bgr8")
-            cv2.imshow("Camara", current_frame)
+            #print(current_frame)
+            if (self.frame_count % 15 == 0):
+                if self.is_recording:
+                    self.get_logger().info("Saving data to queue")
+                    self.record_queue.put((current_frame, self.steering_value, self.throttle_value))
+                cv2.imshow("Camara", current_frame)
+                cv2.waitKey(1)
+            self.frame_count += 1
         except Exception as e:
             self.get_logger().error(f"Error converting or sending image: {e}")
     
@@ -127,6 +148,8 @@ class RCCarVanilla(Node):
             controller.right_trigger.on_change(self.on_right_trigger)
             controller.btn_circle.on_down(self.on_circle_press)
             controller.btn_circle.on_up(self.on_circle_release)
+            controller.btn_l1.on_down(self.on_l1_button_press)
+            controller.btn_r1.on_down(self.on_r1_button_press)
             # register the error callback
             controller.on_error(self.on_error)
             controller.lightbar.set_color_red()
@@ -147,6 +170,30 @@ class RCCarVanilla(Node):
     def on_l1_button_press(self):
         self.is_recording = not self.is_recording
         self.get_logger().info("Recording is {}".format(self.is_recording))
+
+    def on_r1_button_press(self):
+        self.is_recording = False
+        txt_contents = ""
+        self.get_logger().info("Exporting {} items in queue".format(self.record_queue.qsize()))
+        self.get_logger().info("Queue Status: {}".format(self.record_queue.empty()))
+        while not self.record_queue.empty():
+            #self.get_logger().info("Exporting element...")
+            record_name = uuid4().hex
+            qitem = self.record_queue.get()
+            #print(qitem)
+            img_name = os.path.join(self.records_path_images, record_name) + ".jpg"
+            file_line = "{},{},{}\n".format(img_name, qitem[1], qitem[2])
+            img_saved = cv2.imwrite(img_name, qitem[0], [cv2.IMWRITE_JPEG_QUALITY, 90])
+            #print(img_name)
+            #print(file_line)
+            #print(img_saved)
+            if img_saved:
+                txt_contents += file_line
+        csv_file = os.path.join(self.records_path, record_name) + ".csv"
+        with open(csv_file, "w", encoding="utf-8") as f:
+            f.write(txt_contents)
+        self.get_logger().info("Export finished")
+
     
     def on_circle_press(self):
         self.claxon = "1"
@@ -168,27 +215,12 @@ class RCCarVanilla(Node):
             
     def on_right_trigger(self, value):
         value_no_drift = value - self.right_trigger_drift
-        if value_no_drift > 0.1:
-            self.device.right_rumble.set(self.rescale_input(value_no_drift, 0, 1, 100, 180))
-            self.device.left_rumble.set(self.rescale_input(value_no_drift, 0, 1, 100, 180))
-        else:
-            self.device.right_rumble.set(0)
-            self.device.left_rumble.set(0)
-        
-        if value_no_drift > 0.1 and value_no_drift <= 0.45:
-            self.device.right_trigger.effect.soft_rigidity()
-        elif value_no_drift > 0.45 and value_no_drift <= 0.75:
-            self.device.right_trigger.effect.medium_rigidity()
-        elif value_no_drift > 0.75 and value_no_drift <= 1.0:
-            self.device.right_trigger.effect.max_rigidity()
-        else:
-            self.device.right_trigger.effect.no_resistance()
         
         if self._is_reverse_active:
-            self.get_logger().info("Moviendose de reversa")
-            throttle_value = 90 - self.rescale_input(value_no_drift, input_min_value=0, rescale_min_value=0)
+            self.get_logger().debug("Moviendose de reversa")
+            throttle_value = 90 - self.rescale_input(value_no_drift, input_min_value=0, rescale_min_value=0, rescale_max_value=4)
         else:
-            throttle_value = 90 + self.rescale_input(value_no_drift, input_min_value=0, rescale_min_value=0)
+            throttle_value = 90 + self.rescale_input(value_no_drift, input_min_value=0, rescale_min_value=0, rescale_max_value=4)
         self.get_logger().debug("right trigger changed: {} | {}".format(value_no_drift, throttle_value))
         self.throttle_value = throttle_value
 

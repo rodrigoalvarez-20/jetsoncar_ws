@@ -33,6 +33,7 @@ class RCCarVanilla(Node):
         self.frame_count = 0
         self.record_queue = Queue()
         
+        
         if self.get_parameter("load_camera").value:
             self.camera_sub = self.create_subscription(
                 Image,
@@ -54,7 +55,7 @@ class RCCarVanilla(Node):
 
         sleep(5)
         
-        self._steering_value = 90
+        self._steering_value = 100
         self._throttle_value = 90
         self.__claxon = 0
         self._is_break_active = False
@@ -124,10 +125,10 @@ class RCCarVanilla(Node):
             #print(current_frame)
             if (self.frame_count % 15 == 0):
                 if self.is_recording:
-                    self.get_logger().info("Saving data to queue")
+                    self.get_logger().info("Saving data to queue - {}".format(self.frame_count))
                     self.record_queue.put((current_frame, self.steering_value, self.throttle_value))
-                cv2.imshow("Camara", current_frame)
-                cv2.waitKey(1)
+            cv2.imshow("Camara", current_frame)
+            cv2.waitKey(1)
             self.frame_count += 1
         except Exception as e:
             self.get_logger().error(f"Error converting or sending image: {e}")
@@ -218,21 +219,21 @@ class RCCarVanilla(Node):
         
         if self._is_reverse_active:
             self.get_logger().debug("Moviendose de reversa")
-            throttle_value = 90 - self.rescale_input(value_no_drift, input_min_value=0, rescale_min_value=0, rescale_max_value=4)
+            throttle_value = 90 - self.rescale_input(value_no_drift, input_min_value=0, rescale_min_value=0)
         else:
-            throttle_value = 90 + self.rescale_input(value_no_drift, input_min_value=0, rescale_min_value=0, rescale_max_value=4)
+            throttle_value = 90 + self.rescale_input(value_no_drift, input_min_value=0, rescale_min_value=0)
         self.get_logger().debug("right trigger changed: {} | {}".format(value_no_drift, throttle_value))
         self.throttle_value = throttle_value
 
     def on_left_stick_x_changed(self, left_stick_x):
-        actual_value = left_stick_x
+        #actual_value = left_stick_x
         value_no_drift = left_stick_x - \
             self.left_stick_drift if left_stick_x >= 0 else left_stick_x + self.left_stick_drift
-        steering_value = self.rescale_input(value_no_drift) + 90
+        steering_value = self.rescale_input(value_no_drift) + 100
         # self.get_logger().info("on_left_stick_x_changed: {} | Drift: {}".format(actual_value, value_no_drift))
         if value_no_drift >= -0.2 and value_no_drift <= 0.2:
             # Ver si es necesario hacer 0 el angulo de movimiento (fijar a 90)
-            steering_value = 90
+            steering_value = 100
             self.get_logger().debug("Vehiculo centrado | {} | Joy Data: {}".format(
                 value_no_drift, steering_value))
         elif value_no_drift < -0.2:
@@ -251,7 +252,7 @@ class RCCarVanilla(Node):
             # Estos valores son positivos, van de 0 a 1, donde 1 es totalmente derecha
             # Adicionalmente, settear una funcion suave o limite para no exceder el 1
         else:
-            steering_value = 90
+            steering_value = 100
             self.get_logger().debug("Vehiculo en estado desconocido | {}".format(value_no_drift))
         # Enviar datos
         self.steering_value = steering_value
@@ -260,7 +261,7 @@ class RCCarVanilla(Node):
         self.get_logger().error(f'Opps! an error occured: {error}')
 
     def __test_bridge__(self):
-        test_angles = [80, 135, 105, 80, 75, 45, 80]
+        test_angles = [90, 135, 105, 90, 75, 45, 90, 100]
         # Probamos direccion
         for angle in test_angles:
             self.__send_controls__(angle, 90)
